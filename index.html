@@ -24,6 +24,7 @@
     --text: #e5e7eb;
     --text-dim: #6b7280;
     --text-bright: #f9fafb;
+    --safe-top: env(safe-area-inset-top, 0px);
   }
 
   body {
@@ -42,6 +43,8 @@
     max-width: 420px;
     padding: 0 16px;
     padding-bottom: 100px;
+    /* Push content below the status bar / notch */
+    padding-top: calc(var(--safe-top) + 12px);
   }
 
   /* Header */
@@ -49,7 +52,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 18px 0 12px;
+    padding: 14px 0 12px;
     border-bottom: 1px solid var(--border);
   }
   .logo {
@@ -60,6 +63,11 @@
     font-weight: 700;
     color: var(--text-bright);
     letter-spacing: -0.02em;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .tabs {
     display: flex;
@@ -80,6 +88,31 @@
     font-family: inherit;
   }
   .tab.active {
+    background: rgba(52,211,153,0.15);
+    color: var(--accent);
+  }
+
+  /* Unit toggle */
+  .unit-toggle {
+    display: flex;
+    gap: 2px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 2px;
+  }
+  .unit-btn {
+    background: none;
+    border: none;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.03em;
+  }
+  .unit-btn.active {
     background: rgba(52,211,153,0.15);
     color: var(--accent);
   }
@@ -367,9 +400,15 @@
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
       Pathfinder
     </div>
-    <div class="tabs">
-      <button class="tab active" onclick="switchView('tracker')">Track</button>
-      <button class="tab" onclick="switchView('log')">Log</button>
+    <div class="header-right">
+      <div class="unit-toggle">
+        <button class="unit-btn" id="unitBtnMi" onclick="setUnits('imperial')">MI</button>
+        <button class="unit-btn active" id="unitBtnKm" onclick="setUnits('metric')">KM</button>
+      </div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchView('tracker')">Track</button>
+        <button class="tab" onclick="switchView('log')">Log</button>
+      </div>
     </div>
   </div>
 
@@ -389,7 +428,7 @@
 
     <div class="main-metric">
       <div class="main-value" id="distValue">0</div>
-      <div class="main-unit" id="distUnit">meters</div>
+      <div class="main-unit" id="distUnit">feet</div>
     </div>
 
     <div class="metrics-row">
@@ -400,12 +439,12 @@
       <div class="metric-divider"></div>
       <div>
         <div class="metric-value" id="avgSpeedValue">0.0</div>
-        <div class="metric-label">avg km/h</div>
+        <div class="metric-label" id="avgSpeedLabel">avg mph</div>
       </div>
       <div class="metric-divider"></div>
       <div>
         <div class="metric-value" id="curSpeedValue">0.0</div>
-        <div class="metric-label">km/h now</div>
+        <div class="metric-label" id="curSpeedLabel">mph now</div>
       </div>
     </div>
 
@@ -434,6 +473,77 @@
 
 <script>
 const STORAGE_KEY = 'pathfinder-journeys';
+const UNITS_KEY = 'pathfinder-units';
+
+// ─── Unit system ───
+// Data is always stored in km internally. We convert on display.
+const KM_TO_MI = 0.621371;
+const KM_TO_FT = 3280.84;
+const KM_TO_M = 1000;
+
+let units = 'imperial'; // 'metric' or 'imperial'
+
+function loadUnits() {
+  try {
+    const saved = localStorage.getItem(UNITS_KEY);
+    if (saved === 'metric' || saved === 'imperial') units = saved;
+  } catch(e) {}
+  applyUnitButtons();
+}
+
+function setUnits(u) {
+  units = u;
+  try { localStorage.setItem(UNITS_KEY, u); } catch(e) {}
+  applyUnitButtons();
+  updateMetrics();
+  // Re-render log if visible
+  if (document.getElementById('logView').classList.contains('active')) {
+    const detail = document.getElementById('logDetail');
+    if (detail.style.display === 'block' && state._currentDetailIdx != null) {
+      showDetail(state._currentDetailIdx);
+    } else {
+      renderJourneyList();
+    }
+  }
+}
+
+function applyUnitButtons() {
+  document.getElementById('unitBtnMi').classList.toggle('active', units === 'imperial');
+  document.getElementById('unitBtnKm').classList.toggle('active', units === 'metric');
+}
+
+// Format distance (input in km)
+function formatDist(km) {
+  if (units === 'imperial') {
+    const mi = km * KM_TO_MI;
+    if (mi >= 0.1) return { val: mi.toFixed(2), unit: 'miles' };
+    const ft = km * KM_TO_FT;
+    return { val: ft.toFixed(0), unit: 'feet' };
+  } else {
+    if (km >= 1) return { val: km.toFixed(2), unit: 'km' };
+    return { val: (km * KM_TO_M).toFixed(0), unit: 'meters' };
+  }
+}
+
+// Format short distance for cards
+function formatDistShort(km) {
+  if (units === 'imperial') {
+    const mi = km * KM_TO_MI;
+    if (mi >= 0.1) return `${mi.toFixed(2)} mi`;
+    return `${(km * KM_TO_FT).toFixed(0)} ft`;
+  } else {
+    if (km >= 1) return `${km.toFixed(2)} km`;
+    return `${(km * KM_TO_M).toFixed(0)} m`;
+  }
+}
+
+// Format speed (input in km/h)
+function formatSpeed(kmh) {
+  if (units === 'imperial') return (kmh * KM_TO_MI).toFixed(1);
+  return kmh.toFixed(1);
+}
+
+function speedUnit() { return units === 'imperial' ? 'mph' : 'km/h'; }
 
 // ─── localStorage wrapper ───
 const store = {
@@ -441,33 +551,23 @@ const store = {
     try {
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
-    } catch (e) {
-      console.warn('Storage read error:', e);
-      return null;
-    }
+    } catch (e) { return null; }
   },
   set(key, value) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (e) {
-      console.warn('Storage write error:', e);
-      // If quota exceeded, try trimming old journeys
       if (e.name === 'QuotaExceededError' && key === STORAGE_KEY && Array.isArray(value)) {
         try {
-          const trimmed = value.slice(0, Math.max(10, Math.floor(value.length / 2)));
-          localStorage.setItem(key, JSON.stringify(trimmed));
+          localStorage.setItem(key, JSON.stringify(value.slice(0, Math.max(10, Math.floor(value.length / 2)))));
           return true;
-        } catch (e2) {
-          return false;
-        }
+        } catch (e2) { return false; }
       }
       return false;
     }
   },
-  remove(key) {
-    try { localStorage.removeItem(key); } catch (e) {}
-  }
+  remove(key) { try { localStorage.removeItem(key); } catch (e) {} }
 };
 
 let state = {
@@ -479,6 +579,7 @@ let state = {
   points: [],
   speedSamples: [],
   journeys: [],
+  _currentDetailIdx: null,
 };
 let watchId = null;
 let timerRef = null;
@@ -510,10 +611,6 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
 }
 
-function formatDist(km) {
-  return km >= 1 ? { val: km.toFixed(2), unit: 'km' } : { val: (km * 1000).toFixed(0), unit: 'meters' };
-}
-
 // ─── Storage ───
 function loadJourneys() {
   const data = store.get(STORAGE_KEY);
@@ -527,49 +624,39 @@ function saveJourneys() {
 // ─── Map helpers ───
 function createDarkTileLayer() {
   return L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd',
+    maxZoom: 19, subdomains: 'abcd',
   });
 }
 
 function initLiveMap() {
   if (liveMap) { liveMap.remove(); liveMap = null; }
-  const wrap = document.getElementById('liveMapWrap');
-  wrap.style.display = 'block';
+  document.getElementById('liveMapWrap').style.display = 'block';
   document.getElementById('mapPlaceholder').style.display = 'none';
 
   liveMap = L.map('liveMap', {
-    zoomControl: true,
-    attributionControl: false,
-    dragging: true,
-    scrollWheelZoom: true,
+    zoomControl: true, attributionControl: false, dragging: true, scrollWheelZoom: true,
   }).setView([0, 0], 16);
 
   createDarkTileLayer().addTo(liveMap);
 
   liveTrail = L.polyline([], {
-    color: '#34d399', weight: 4, opacity: 0.9,
-    smoothFactor: 1, lineCap: 'round', lineJoin: 'round',
+    color: '#34d399', weight: 4, opacity: 0.9, smoothFactor: 1, lineCap: 'round', lineJoin: 'round',
   }).addTo(liveMap);
 
-  // Glow line
   state._glowLine = L.polyline([], {
-    color: '#34d399', weight: 12, opacity: 0.15,
-    smoothFactor: 1, lineCap: 'round',
+    color: '#34d399', weight: 12, opacity: 0.15, smoothFactor: 1, lineCap: 'round',
   }).addTo(liveMap);
 
   state._startMarker = null;
 
   liveDot = L.circleMarker([0, 0], {
-    radius: 8, color: '#34d399', fillColor: '#34d399',
-    fillOpacity: 1, weight: 3, opacity: 0.4,
+    radius: 8, color: '#34d399', fillColor: '#34d399', fillOpacity: 1, weight: 3, opacity: 0.4,
   });
 }
 
 function updateLiveMap(lat, lng) {
   if (!liveMap) return;
   const ll = [lat, lng];
-
   liveTrail.addLatLng(ll);
   if (state._glowLine) state._glowLine.addLatLng(ll);
 
@@ -578,16 +665,12 @@ function updateLiveMap(lat, lng) {
       radius: 7, color: '#34d399', fillColor: '#0a0f1a', fillOpacity: 1, weight: 3,
     }).addTo(liveMap);
     L.marker(ll, {
-      icon: L.divIcon({
-        className: '',
-        html: '<div style="color:#6b7280;font-size:10px;font-weight:600;font-family:DM Sans,sans-serif;white-space:nowrap;margin-left:14px;margin-top:-6px">START</div>',
-      })
+      icon: L.divIcon({ className: '', html: '<div style="color:#6b7280;font-size:10px;font-weight:600;font-family:DM Sans,sans-serif;white-space:nowrap;margin-left:14px;margin-top:-6px">START</div>' })
     }).addTo(liveMap);
   }
 
   liveDot.setLatLng(ll);
   if (!liveMap.hasLayer(liveDot)) liveDot.addTo(liveMap);
-
   liveMap.panTo(ll, { animate: true, duration: 0.5 });
 
   const d = formatDist(state.distance);
@@ -596,10 +679,7 @@ function updateLiveMap(lat, lng) {
 
 function destroyLiveMap() {
   if (liveMap) { liveMap.remove(); liveMap = null; }
-  liveTrail = null;
-  liveDot = null;
-  state._glowLine = null;
-  state._startMarker = null;
+  liveTrail = null; liveDot = null; state._glowLine = null; state._startMarker = null;
   document.getElementById('liveMapWrap').style.display = 'none';
   document.getElementById('mapPlaceholder').style.display = 'none';
 }
@@ -640,6 +720,7 @@ function switchView(v) {
   if (v === 'log') {
     document.getElementById('logDetail').style.display = 'none';
     document.getElementById('logMain').style.display = 'block';
+    state._currentDetailIdx = null;
     renderJourneyList();
   }
   if (detailMap) { detailMap.remove(); detailMap = null; }
@@ -651,20 +732,11 @@ function toggleTracking() {
 }
 
 function startTracking() {
-  if (!navigator.geolocation) {
-    showError('Geolocation not supported on this device.');
-    return;
-  }
+  if (!navigator.geolocation) { showError('Geolocation not supported.'); return; }
   hideError();
-  state.distance = 0;
-  state.elapsed = 0;
-  state.speed = 0;
-  state.gpsReady = false;
-  state.points = [];
-  state.speedSamples = [];
-  lastPos = null;
-  startTime = Date.now();
-  state.tracking = true;
+  state.distance = 0; state.elapsed = 0; state.speed = 0;
+  state.gpsReady = false; state.points = []; state.speedSamples = [];
+  lastPos = null; startTime = Date.now(); state.tracking = true;
 
   initLiveMap();
   document.getElementById('mapPlaceholder').style.display = 'block';
@@ -673,8 +745,7 @@ function startTracking() {
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
       const { latitude: lat, longitude: lng, speed: gpsSpeed } = pos.coords;
-      state.gpsReady = true;
-      updateGPSIndicator();
+      state.gpsReady = true; updateGPSIndicator();
       state.points.push({ lat, lng, time: Date.now() });
 
       if (state.points.length === 1) {
@@ -689,13 +760,10 @@ function startTracking() {
         if (d > 0.003) state.distance += d;
       }
       lastPos = { lat, lng };
-
       state.speed = gpsSpeed != null && gpsSpeed >= 0 ? gpsSpeed * 3.6 : 0;
 
       const elSec = (Date.now() - startTime) / 1000;
-      if (elSec > 2) {
-        state.speedSamples.push({ time: elSec, speed: (state.distance / elSec) * 3600 });
-      }
+      if (elSec > 2) state.speedSamples.push({ time: elSec, speed: (state.distance / elSec) * 3600 });
 
       updateLiveMap(lat, lng);
       updateMetrics();
@@ -704,11 +772,7 @@ function startTracking() {
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
   );
 
-  timerRef = setInterval(() => {
-    state.elapsed = (Date.now() - startTime) / 1000;
-    updateMetrics();
-  }, 1000);
-
+  timerRef = setInterval(() => { state.elapsed = (Date.now() - startTime) / 1000; updateMetrics(); }, 1000);
   document.getElementById('gpsIndicator').style.display = 'flex';
   updateButton();
 }
@@ -716,8 +780,7 @@ function startTracking() {
 function stopTracking() {
   if (watchId != null) navigator.geolocation.clearWatch(watchId);
   if (timerRef) clearInterval(timerRef);
-  watchId = null;
-  timerRef = null;
+  watchId = null; timerRef = null;
 
   const finalElapsed = (Date.now() - startTime) / 1000;
   const avgSpd = finalElapsed > 0 ? (state.distance / finalElapsed) * 3600 : 0;
@@ -728,18 +791,14 @@ function stopTracking() {
       const step = Math.ceil(stored.length / 300);
       stored = stored.filter((_, i) => i % step === 0 || i === stored.length - 1);
     }
-    const journey = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      distance: state.distance,
-      duration: finalElapsed,
+    state.journeys.unshift({
+      id: Date.now(), date: new Date().toISOString(),
+      distance: state.distance, duration: finalElapsed,
       avgSpeed: avgSpd,
       maxSpeed: state.speedSamples.length > 0 ? Math.max(...state.speedSamples.map(s => s.speed)) : 0,
       speedHistory: state.speedSamples.slice(-80),
-      points: stored,
-      pointCount: state.points.length,
-    };
-    state.journeys.unshift(journey);
+      points: stored, pointCount: state.points.length,
+    });
     if (state.journeys.length > 50) state.journeys = state.journeys.slice(0, 50);
     saveJourneys();
   }
@@ -757,15 +816,15 @@ function updateMetrics() {
   document.getElementById('distUnit').textContent = d.unit;
   document.getElementById('timeValue').textContent = formatDuration(state.elapsed);
   const avg = state.elapsed > 0 ? (state.distance / state.elapsed) * 3600 : 0;
-  document.getElementById('avgSpeedValue').textContent = avg.toFixed(1);
-  document.getElementById('curSpeedValue').textContent = state.speed.toFixed(1);
+  document.getElementById('avgSpeedValue').textContent = formatSpeed(avg);
+  document.getElementById('avgSpeedLabel').textContent = `avg ${speedUnit()}`;
+  document.getElementById('curSpeedValue').textContent = formatSpeed(state.speed);
+  document.getElementById('curSpeedLabel').textContent = `${speedUnit()} now`;
 }
 
 function updateGPSIndicator() {
-  const dot = document.getElementById('gpsDot');
-  const txt = document.getElementById('gpsText');
-  dot.classList.toggle('locked', state.gpsReady);
-  txt.textContent = state.gpsReady ? 'GPS locked' : 'Acquiring GPS…';
+  document.getElementById('gpsDot').classList.toggle('locked', state.gpsReady);
+  document.getElementById('gpsText').textContent = state.gpsReady ? 'GPS locked' : 'Acquiring GPS…';
 }
 
 function updateButton() {
@@ -779,14 +838,8 @@ function updateButton() {
   }
 }
 
-function showError(msg) {
-  const el = document.getElementById('errorMsg');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-function hideError() {
-  document.getElementById('errorMsg').style.display = 'none';
-}
+function showError(msg) { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; }
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
 
 // ─── Journey list ───
 function renderJourneyList() {
@@ -798,8 +851,7 @@ function renderJourneyList() {
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
         <div class="empty-title">No journeys yet</div>
         <div class="empty-sub">Start tracking to log your first trip</div>
-      </div>
-    `;
+      </div>`;
     return;
   }
 
@@ -808,26 +860,23 @@ function renderJourneyList() {
       <span class="log-title">${state.journeys.length} Journey${state.journeys.length !== 1 ? 's' : ''}</span>
       <button class="btn-clear" onclick="clearAll()">Clear All</button>
     </div>
-    <div class="journey-list">
-  `;
+    <div class="journey-list">`;
 
   state.journeys.forEach((j, idx) => {
-    const d = formatDist(j.distance);
     html += `
       <button class="journey-card" onclick="showDetail(${idx})">
         <div>
           <div class="journey-date">${formatDate(j.date)}</div>
           <div class="journey-stats">
-            <span class="journey-stat">${d.val} ${d.unit}</span>
+            <span class="journey-stat">${formatDistShort(j.distance)}</span>
             <span class="journey-dot">·</span>
             <span class="journey-stat">${formatDuration(j.duration)}</span>
             <span class="journey-dot">·</span>
-            <span class="journey-stat">${j.avgSpeed.toFixed(1)} km/h</span>
+            <span class="journey-stat">${formatSpeed(j.avgSpeed)} ${speedUnit()}</span>
           </div>
         </div>
         <span class="journey-arrow">›</span>
-      </button>
-    `;
+      </button>`;
   });
 
   html += '</div>';
@@ -837,6 +886,7 @@ function renderJourneyList() {
 function showDetail(idx) {
   const j = state.journeys[idx];
   if (!j) return;
+  state._currentDetailIdx = idx;
   document.getElementById('logMain').style.display = 'none';
   const el = document.getElementById('logDetail');
   el.style.display = 'block';
@@ -858,25 +908,25 @@ function showDetail(idx) {
           <div class="detail-label">duration</div>
         </div>
         <div class="detail-stat">
-          <div class="detail-value">${j.avgSpeed.toFixed(1)}</div>
-          <div class="detail-label">avg km/h</div>
+          <div class="detail-value">${formatSpeed(j.avgSpeed)}</div>
+          <div class="detail-label">avg ${speedUnit()}</div>
         </div>
         <div class="detail-stat">
-          <div class="detail-value">${j.maxSpeed.toFixed(1)}</div>
-          <div class="detail-label">max km/h</div>
+          <div class="detail-value">${formatSpeed(j.maxSpeed)}</div>
+          <div class="detail-label">max ${speedUnit()}</div>
         </div>
       </div>
       <div style="margin-top:12px">
         <div class="detail-label">${j.pointCount || j.points?.length || 0} GPS points recorded</div>
       </div>
-    </div>
-  `;
+    </div>`;
 
   if (hasMap) showDetailMap(j);
 }
 
 function backToList() {
   if (detailMap) { detailMap.remove(); detailMap = null; }
+  state._currentDetailIdx = null;
   document.getElementById('logDetail').style.display = 'none';
   document.getElementById('logMain').style.display = 'block';
 }
@@ -890,6 +940,7 @@ function clearAll() {
 
 // ─── Init ───
 loadJourneys();
+loadUnits();
 updateMetrics();
 </script>
 </body>
