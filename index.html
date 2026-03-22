@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pathfinder">
+<title>Pathfinder</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #0a0f1a;
+    --card: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.06);
+    --accent: #34d399;
+    --accent-dark: #059669;
+    --red: #ef4444;
+    --text: #e5e7eb;
+    --text-dim: #6b7280;
+    --text-bright: #f9fafb;
+  }
+
+  body {
+    background: var(--bg);
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    justify-content: center;
+    overflow-x: hidden;
+  }
+
+  #app {
+    width: 100%;
+    max-width: 420px;
+    padding: 0 16px;
+    padding-bottom: 100px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 0 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: -0.02em;
+  }
+  .tabs {
+    display: flex;
+    gap: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .tab {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .tab.active {
+    background: rgba(52,211,153,0.15);
+    color: var(--accent);
+  }
+
+  /* Map */
+  .map-wrap {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-top: 16px;
+    position: relative;
+  }
+  .map-container {
+    width: 100%;
+    height: 240px;
+    background: #111827;
+  }
+  .map-placeholder {
+    width: 100%;
+    height: 200px;
+    background: var(--card);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 16px;
+  }
+  .map-overlay {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(10,15,26,0.85);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    z-index: 800;
+    pointer-events: none;
+  }
+
+  /* Metrics */
+  .main-metric {
+    text-align: center;
+    padding: 16px 0 8px;
+  }
+  .main-value {
+    font-size: 64px;
+    font-weight: 200;
+    color: var(--text-bright);
+    letter-spacing: -0.04em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .main-unit {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin-top: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .metrics-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 14px 0;
+    background: var(--card);
+    border-radius: 16px;
+    margin-top: 8px;
+  }
+  .metric-value {
+    font-size: 20px;
+    font-weight: 300;
+    color: #d1d5db;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+  .metric-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 3px;
+    text-align: center;
+  }
+  .metric-divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(255,255,255,0.08);
+  }
+
+  /* GPS indicator */
+  .gps-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .gps-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fbbf24;
+  }
+  .gps-dot.locked { background: var(--accent); }
+  .gps-text {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  /* Buttons */
+  .btn-start, .btn-stop {
+    width: 100%;
+    padding: 18px 0;
+    border-radius: 16px;
+    border: none;
+    color: white;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 12px;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .btn-start {
+    background: linear-gradient(135deg, #059669, #34d399);
+    box-shadow: 0 4px 24px rgba(52,211,153,0.25);
+  }
+  .btn-stop {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    box-shadow: 0 4px 24px rgba(239,68,68,0.25);
+  }
+
+  /* Error */
+  .error-msg {
+    background: rgba(239,68,68,0.15);
+    color: #fca5a5;
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    text-align: center;
+    margin-top: 12px;
+  }
+
+  /* Journey Log */
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0 12px;
+  }
+  .log-title { font-size: 16px; font-weight: 600; color: #d1d5db; }
+  .btn-clear {
+    background: none;
+    border: 1px solid rgba(239,68,68,0.3);
+    color: #fca5a5;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .journey-list { display: flex; flex-direction: column; gap: 8px; }
+  .journey-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .journey-date { font-size: 14px; font-weight: 600; color: #d1d5db; }
+  .journey-stats {
+    display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap;
+  }
+  .journey-stat { font-size: 13px; color: var(--text-dim); }
+  .journey-dot { color: #374151; }
+  .journey-arrow { font-size: 20px; color: #4b5563; flex-shrink: 0; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .empty-title { font-size: 16px; font-weight: 600; color: var(--text-dim); }
+  .empty-sub { font-size: 13px; color: #4b5563; }
+
+  /* Detail view */
+  .btn-back {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 0;
+    margin: 16px 0 12px;
+    font-family: inherit;
+  }
+  .detail-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid var(--border);
+  }
+  .detail-date { font-size: 16px; font-weight: 600; color: var(--text-bright); margin-bottom: 16px; }
+  .detail-map { border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+  .detail-map .map-container { height: 260px; }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .detail-stat { text-align: center; }
+  .detail-value {
+    font-size: 26px;
+    font-weight: 300;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .detail-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 3px;
+  }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* Storage indicator */
+  .storage-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: #4b5563;
+    margin-top: 6px;
+  }
+  .storage-badge svg { opacity: 0.5; }
+
+  /* Leaflet overrides */
+  .leaflet-container { background: #111827 !important; }
+  .leaflet-control-attribution { display: none !important; }
+  .leaflet-control-zoom a {
+    background: rgba(10,15,26,0.85) !important;
+    color: #d1d5db !important;
+    border-color: rgba(255,255,255,0.1) !important;
+    backdrop-filter: blur(8px);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+      Pathfinder
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchView('tracker')">Track</button>
+      <button class="tab" onclick="switchView('log')">Log</button>
+    </div>
+  </div>
+
+  <!-- TRACKER VIEW -->
+  <div id="trackerView" class="view active">
+    <div id="errorMsg" class="error-msg" style="display:none"></div>
+
+    <div id="liveMapWrap" class="map-wrap" style="display:none">
+      <div id="liveMap" class="map-container"></div>
+      <div id="liveOverlay" class="map-overlay"></div>
+    </div>
+
+    <div id="mapPlaceholder" class="map-placeholder" style="display:none">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Move to see your trail on the map…
+    </div>
+
+    <div class="main-metric">
+      <div class="main-value" id="distValue">0</div>
+      <div class="main-unit" id="distUnit">meters</div>
+    </div>
+
+    <div class="metrics-row">
+      <div>
+        <div class="metric-value" id="timeValue">00:00</div>
+        <div class="metric-label">time</div>
+      </div>
+      <div class="metric-divider"></div>
+      <div>
+        <div class="metric-value" id="avgSpeedValue">0.0</div>
+        <div class="metric-label">avg km/h</div>
+      </div>
+      <div class="metric-divider"></div>
+      <div>
+        <div class="metric-value" id="curSpeedValue">0.0</div>
+        <div class="metric-label">km/h now</div>
+      </div>
+    </div>
+
+    <div id="gpsIndicator" class="gps-indicator" style="display:none">
+      <div id="gpsDot" class="gps-dot"></div>
+      <span class="gps-text" id="gpsText">Acquiring GPS…</span>
+    </div>
+
+    <button id="toggleBtn" class="btn-start" onclick="toggleTracking()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+      Start Journey
+    </button>
+
+    <div class="storage-badge">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2"/></svg>
+      Data stored on this device only
+    </div>
+  </div>
+
+  <!-- LOG VIEW -->
+  <div id="logView" class="view">
+    <div id="logMain"></div>
+    <div id="logDetail" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'pathfinder-journeys';
+
+// ─── localStorage wrapper ───
+const store = {
+  get(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      console.warn('Storage read error:', e);
+      return null;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      console.warn('Storage write error:', e);
+      // If quota exceeded, try trimming old journeys
+      if (e.name === 'QuotaExceededError' && key === STORAGE_KEY && Array.isArray(value)) {
+        try {
+          const trimmed = value.slice(0, Math.max(10, Math.floor(value.length / 2)));
+          localStorage.setItem(key, JSON.stringify(trimmed));
+          return true;
+        } catch (e2) {
+          return false;
+        }
+      }
+      return false;
+    }
+  },
+  remove(key) {
+    try { localStorage.removeItem(key); } catch (e) {}
+  }
+};
+
+let state = {
+  tracking: false,
+  distance: 0,
+  elapsed: 0,
+  speed: 0,
+  gpsReady: false,
+  points: [],
+  speedSamples: [],
+  journeys: [],
+};
+let watchId = null;
+let timerRef = null;
+let startTime = null;
+let lastPos = null;
+let liveMap = null;
+let liveTrail = null;
+let liveDot = null;
+let detailMap = null;
+
+// ─── Utils ───
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDuration(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+}
+
+function formatDist(km) {
+  return km >= 1 ? { val: km.toFixed(2), unit: 'km' } : { val: (km * 1000).toFixed(0), unit: 'meters' };
+}
+
+// ─── Storage ───
+function loadJourneys() {
+  const data = store.get(STORAGE_KEY);
+  if (Array.isArray(data)) state.journeys = data;
+}
+
+function saveJourneys() {
+  store.set(STORAGE_KEY, state.journeys);
+}
+
+// ─── Map helpers ───
+function createDarkTileLayer() {
+  return L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+  });
+}
+
+function initLiveMap() {
+  if (liveMap) { liveMap.remove(); liveMap = null; }
+  const wrap = document.getElementById('liveMapWrap');
+  wrap.style.display = 'block';
+  document.getElementById('mapPlaceholder').style.display = 'none';
+
+  liveMap = L.map('liveMap', {
+    zoomControl: true,
+    attributionControl: false,
+    dragging: true,
+    scrollWheelZoom: true,
+  }).setView([0, 0], 16);
+
+  createDarkTileLayer().addTo(liveMap);
+
+  liveTrail = L.polyline([], {
+    color: '#34d399', weight: 4, opacity: 0.9,
+    smoothFactor: 1, lineCap: 'round', lineJoin: 'round',
+  }).addTo(liveMap);
+
+  // Glow line
+  state._glowLine = L.polyline([], {
+    color: '#34d399', weight: 12, opacity: 0.15,
+    smoothFactor: 1, lineCap: 'round',
+  }).addTo(liveMap);
+
+  state._startMarker = null;
+
+  liveDot = L.circleMarker([0, 0], {
+    radius: 8, color: '#34d399', fillColor: '#34d399',
+    fillOpacity: 1, weight: 3, opacity: 0.4,
+  });
+}
+
+function updateLiveMap(lat, lng) {
+  if (!liveMap) return;
+  const ll = [lat, lng];
+
+  liveTrail.addLatLng(ll);
+  if (state._glowLine) state._glowLine.addLatLng(ll);
+
+  if (!state._startMarker && state.points.length <= 2) {
+    state._startMarker = L.circleMarker(ll, {
+      radius: 7, color: '#34d399', fillColor: '#0a0f1a', fillOpacity: 1, weight: 3,
+    }).addTo(liveMap);
+    L.marker(ll, {
+      icon: L.divIcon({
+        className: '',
+        html: '<div style="color:#6b7280;font-size:10px;font-weight:600;font-family:DM Sans,sans-serif;white-space:nowrap;margin-left:14px;margin-top:-6px">START</div>',
+      })
+    }).addTo(liveMap);
+  }
+
+  liveDot.setLatLng(ll);
+  if (!liveMap.hasLayer(liveDot)) liveDot.addTo(liveMap);
+
+  liveMap.panTo(ll, { animate: true, duration: 0.5 });
+
+  const d = formatDist(state.distance);
+  document.getElementById('liveOverlay').textContent = `${d.val} ${d.unit}`;
+}
+
+function destroyLiveMap() {
+  if (liveMap) { liveMap.remove(); liveMap = null; }
+  liveTrail = null;
+  liveDot = null;
+  state._glowLine = null;
+  state._startMarker = null;
+  document.getElementById('liveMapWrap').style.display = 'none';
+  document.getElementById('mapPlaceholder').style.display = 'none';
+}
+
+function showDetailMap(journey) {
+  setTimeout(() => {
+    const el = document.getElementById('detailMapEl');
+    if (!el || !journey.points || journey.points.length < 2) return;
+    if (detailMap) { detailMap.remove(); detailMap = null; }
+
+    detailMap = L.map(el, { zoomControl: true, attributionControl: false });
+    createDarkTileLayer().addTo(detailMap);
+
+    const coords = journey.points.map(p => [p.lat, p.lng]);
+
+    L.polyline(coords, { color: '#34d399', weight: 12, opacity: 0.12, smoothFactor: 1, lineCap: 'round' }).addTo(detailMap);
+    L.polyline(coords, { color: '#34d399', weight: 4, opacity: 0.9, smoothFactor: 1, lineCap: 'round', lineJoin: 'round' }).addTo(detailMap);
+
+    const s = coords[0];
+    L.circleMarker(s, { radius: 7, color: '#34d399', fillColor: '#0a0f1a', fillOpacity: 1, weight: 3 }).addTo(detailMap);
+    L.marker(s, { icon: L.divIcon({ className: '', html: '<div style="color:#9ca3af;font-size:10px;font-weight:600;font-family:DM Sans,sans-serif;white-space:nowrap;margin-left:14px;margin-top:-6px">START</div>' }) }).addTo(detailMap);
+
+    const e = coords[coords.length - 1];
+    L.circleMarker(e, { radius: 7, color: '#f87171', fillColor: '#0a0f1a', fillOpacity: 1, weight: 3 }).addTo(detailMap);
+    L.marker(e, { icon: L.divIcon({ className: '', html: '<div style="color:#9ca3af;font-size:10px;font-weight:600;font-family:DM Sans,sans-serif;white-space:nowrap;margin-left:14px;margin-top:-6px">END</div>' }) }).addTo(detailMap);
+
+    detailMap.fitBounds(L.latLngBounds(coords), { padding: [30, 30], maxZoom: 17 });
+  }, 100);
+}
+
+// ─── View switching ───
+function switchView(v) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', (v === 'tracker' && i === 0) || (v === 'log' && i === 1));
+  });
+  document.getElementById('trackerView').classList.toggle('active', v === 'tracker');
+  document.getElementById('logView').classList.toggle('active', v === 'log');
+  if (v === 'log') {
+    document.getElementById('logDetail').style.display = 'none';
+    document.getElementById('logMain').style.display = 'block';
+    renderJourneyList();
+  }
+  if (detailMap) { detailMap.remove(); detailMap = null; }
+}
+
+// ─── Tracking ───
+function toggleTracking() {
+  if (state.tracking) stopTracking(); else startTracking();
+}
+
+function startTracking() {
+  if (!navigator.geolocation) {
+    showError('Geolocation not supported on this device.');
+    return;
+  }
+  hideError();
+  state.distance = 0;
+  state.elapsed = 0;
+  state.speed = 0;
+  state.gpsReady = false;
+  state.points = [];
+  state.speedSamples = [];
+  lastPos = null;
+  startTime = Date.now();
+  state.tracking = true;
+
+  initLiveMap();
+  document.getElementById('mapPlaceholder').style.display = 'block';
+  document.getElementById('liveMapWrap').style.display = 'none';
+
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude: lat, longitude: lng, speed: gpsSpeed } = pos.coords;
+      state.gpsReady = true;
+      updateGPSIndicator();
+      state.points.push({ lat, lng, time: Date.now() });
+
+      if (state.points.length === 1) {
+        document.getElementById('mapPlaceholder').style.display = 'none';
+        document.getElementById('liveMapWrap').style.display = 'block';
+        liveMap.setView([lat, lng], 16);
+        setTimeout(() => liveMap.invalidateSize(), 100);
+      }
+
+      if (lastPos) {
+        const d = haversine(lastPos.lat, lastPos.lng, lat, lng);
+        if (d > 0.003) state.distance += d;
+      }
+      lastPos = { lat, lng };
+
+      state.speed = gpsSpeed != null && gpsSpeed >= 0 ? gpsSpeed * 3.6 : 0;
+
+      const elSec = (Date.now() - startTime) / 1000;
+      if (elSec > 2) {
+        state.speedSamples.push({ time: elSec, speed: (state.distance / elSec) * 3600 });
+      }
+
+      updateLiveMap(lat, lng);
+      updateMetrics();
+    },
+    (err) => showError(`GPS Error: ${err.message}. Check location permissions.`),
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+  );
+
+  timerRef = setInterval(() => {
+    state.elapsed = (Date.now() - startTime) / 1000;
+    updateMetrics();
+  }, 1000);
+
+  document.getElementById('gpsIndicator').style.display = 'flex';
+  updateButton();
+}
+
+function stopTracking() {
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  if (timerRef) clearInterval(timerRef);
+  watchId = null;
+  timerRef = null;
+
+  const finalElapsed = (Date.now() - startTime) / 1000;
+  const avgSpd = finalElapsed > 0 ? (state.distance / finalElapsed) * 3600 : 0;
+
+  if (state.distance > 0.005 || finalElapsed > 10) {
+    let stored = [...state.points];
+    if (stored.length > 300) {
+      const step = Math.ceil(stored.length / 300);
+      stored = stored.filter((_, i) => i % step === 0 || i === stored.length - 1);
+    }
+    const journey = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      distance: state.distance,
+      duration: finalElapsed,
+      avgSpeed: avgSpd,
+      maxSpeed: state.speedSamples.length > 0 ? Math.max(...state.speedSamples.map(s => s.speed)) : 0,
+      speedHistory: state.speedSamples.slice(-80),
+      points: stored,
+      pointCount: state.points.length,
+    };
+    state.journeys.unshift(journey);
+    if (state.journeys.length > 50) state.journeys = state.journeys.slice(0, 50);
+    saveJourneys();
+  }
+
+  state.tracking = false;
+  destroyLiveMap();
+  document.getElementById('gpsIndicator').style.display = 'none';
+  updateButton();
+}
+
+// ─── UI updates ───
+function updateMetrics() {
+  const d = formatDist(state.distance);
+  document.getElementById('distValue').textContent = d.val;
+  document.getElementById('distUnit').textContent = d.unit;
+  document.getElementById('timeValue').textContent = formatDuration(state.elapsed);
+  const avg = state.elapsed > 0 ? (state.distance / state.elapsed) * 3600 : 0;
+  document.getElementById('avgSpeedValue').textContent = avg.toFixed(1);
+  document.getElementById('curSpeedValue').textContent = state.speed.toFixed(1);
+}
+
+function updateGPSIndicator() {
+  const dot = document.getElementById('gpsDot');
+  const txt = document.getElementById('gpsText');
+  dot.classList.toggle('locked', state.gpsReady);
+  txt.textContent = state.gpsReady ? 'GPS locked' : 'Acquiring GPS…';
+}
+
+function updateButton() {
+  const btn = document.getElementById('toggleBtn');
+  if (state.tracking) {
+    btn.className = 'btn-stop';
+    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Stop';
+  } else {
+    btn.className = 'btn-start';
+    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="6 3 20 12 6 21 6 3"/></svg> Start Journey';
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideError() {
+  document.getElementById('errorMsg').style.display = 'none';
+}
+
+// ─── Journey list ───
+function renderJourneyList() {
+  const el = document.getElementById('logMain');
+  if (state.journeys.length === 0) {
+    el.innerHTML = `
+      <div class="log-header"><span class="log-title">0 Journeys</span></div>
+      <div class="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <div class="empty-title">No journeys yet</div>
+        <div class="empty-sub">Start tracking to log your first trip</div>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div class="log-header">
+      <span class="log-title">${state.journeys.length} Journey${state.journeys.length !== 1 ? 's' : ''}</span>
+      <button class="btn-clear" onclick="clearAll()">Clear All</button>
+    </div>
+    <div class="journey-list">
+  `;
+
+  state.journeys.forEach((j, idx) => {
+    const d = formatDist(j.distance);
+    html += `
+      <button class="journey-card" onclick="showDetail(${idx})">
+        <div>
+          <div class="journey-date">${formatDate(j.date)}</div>
+          <div class="journey-stats">
+            <span class="journey-stat">${d.val} ${d.unit}</span>
+            <span class="journey-dot">·</span>
+            <span class="journey-stat">${formatDuration(j.duration)}</span>
+            <span class="journey-dot">·</span>
+            <span class="journey-stat">${j.avgSpeed.toFixed(1)} km/h</span>
+          </div>
+        </div>
+        <span class="journey-arrow">›</span>
+      </button>
+    `;
+  });
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function showDetail(idx) {
+  const j = state.journeys[idx];
+  if (!j) return;
+  document.getElementById('logMain').style.display = 'none';
+  const el = document.getElementById('logDetail');
+  el.style.display = 'block';
+  const d = formatDist(j.distance);
+  const hasMap = j.points && j.points.length >= 2;
+
+  el.innerHTML = `
+    <button class="btn-back" onclick="backToList()">← Back</button>
+    <div class="detail-card">
+      <div class="detail-date">${formatDate(j.date)}</div>
+      ${hasMap ? '<div class="detail-map"><div id="detailMapEl" class="map-container" style="height:260px"></div></div>' : ''}
+      <div class="detail-grid">
+        <div class="detail-stat">
+          <div class="detail-value">${d.val}</div>
+          <div class="detail-label">${d.unit}</div>
+        </div>
+        <div class="detail-stat">
+          <div class="detail-value">${formatDuration(j.duration)}</div>
+          <div class="detail-label">duration</div>
+        </div>
+        <div class="detail-stat">
+          <div class="detail-value">${j.avgSpeed.toFixed(1)}</div>
+          <div class="detail-label">avg km/h</div>
+        </div>
+        <div class="detail-stat">
+          <div class="detail-value">${j.maxSpeed.toFixed(1)}</div>
+          <div class="detail-label">max km/h</div>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="detail-label">${j.pointCount || j.points?.length || 0} GPS points recorded</div>
+      </div>
+    </div>
+  `;
+
+  if (hasMap) showDetailMap(j);
+}
+
+function backToList() {
+  if (detailMap) { detailMap.remove(); detailMap = null; }
+  document.getElementById('logDetail').style.display = 'none';
+  document.getElementById('logMain').style.display = 'block';
+}
+
+function clearAll() {
+  if (!confirm('Delete all saved journeys? This cannot be undone.')) return;
+  state.journeys = [];
+  store.remove(STORAGE_KEY);
+  renderJourneyList();
+}
+
+// ─── Init ───
+loadJourneys();
+updateMetrics();
+</script>
+</body>
+</html>
